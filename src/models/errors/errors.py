@@ -20,6 +20,15 @@ class ValidationError(CustomHTTPException):
         )
 
 
+class EntityAlreadyExistsError(CustomHTTPException):
+    def __init__(self, **kwargs):
+        super().__init__(
+            status=kwargs.get("status") or status.HTTP_409_CONFLICT,
+            detail=kwargs.get("detail") or "",
+            title=kwargs.get("title") or "Entity already exists"
+        )
+
+
 class AuthenticationError(CustomHTTPException):
     def __init__(self, detail: Optional[str] = None):
         super().__init__(
