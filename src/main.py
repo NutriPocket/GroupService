@@ -2,6 +2,7 @@ import logging
 from os import getenv
 import dotenv
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import uvicorn
@@ -14,7 +15,7 @@ from routes import group_routes, health_routes
 
 app = FastAPI()
 
-
+@app.exception_handler(RequestValidationError)
 @app.exception_handler(HTTPException)
 @app.exception_handler(Exception)
 async def exception_handler(request: Request, exc: Exception) -> JSONResponse:
