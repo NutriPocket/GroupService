@@ -1,0 +1,30 @@
+name: food_service
+
+services:
+    database:
+        image: postgres:latest
+        container_name: postgres_service
+        environment:
+            POSTGRES_USER: user
+            POSTGRES_PASSWORD: password
+            POSTGRES_DB: database
+        ports:
+            - "5432:5432"
+        volumes:
+            - postgres_data:/var/lib/postgresql/data
+            - ./src/sql/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+    app:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        container_name: app_service
+        environment:
+            DATABASE_URL: postgresql://user:password@database:5432/database
+        ports:
+            - "8080:8080"
+        depends_on:
+            - database
+
+volumes:
+    postgres_data:
