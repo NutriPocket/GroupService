@@ -85,7 +85,7 @@ class GroupRepository(IGroupRepository):
             """
             SELECT g.id, g.name, g.description, g.owner_id, g.created_at, g.updated_at
             FROM groups g
-            JOIN members m ON g.id = m.group_id
+            JOIN group_members m ON g.id = m.group_id
             WHERE m.user_id = :user_id
             """
         )
