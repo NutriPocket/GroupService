@@ -22,7 +22,7 @@ services:
         environment:
             DATABASE_URL: postgresql://user:password@database:5432/database
         ports:
-            - "8080:8080"
+            - "8083:8083"
         volumes:
             - ./.env:/.env:ro
         depends_on:

@@ -52,6 +52,6 @@ if __name__ == "__main__":
     dotenv.load_dotenv(env_path)
 
     HOST: str = getenv("HOST", "0.0.0.0")
-    PORT: int = int(getenv("PORT", 8080))
+    PORT: int = int(getenv("PORT", 8083))
 
     uvicorn.run(app, host=HOST, port=PORT)
