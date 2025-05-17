@@ -125,7 +125,7 @@ class GroupRepository(IGroupRepository):
     def get_group_members(self, group_id: str) -> list[Member]:
         query = text(
             """
-            SELECT user_id
+            SELECT user_id, created_at
             FROM group_members
             WHERE group_id = :group_id
             """
