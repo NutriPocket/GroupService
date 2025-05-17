@@ -23,6 +23,8 @@ services:
             DATABASE_URL: postgresql://user:password@database:5432/database
         ports:
             - "8080:8080"
+        volumes:
+            - ./.env:/.env:ro
         depends_on:
             - database
 
