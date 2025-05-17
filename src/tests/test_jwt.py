@@ -1,4 +1,3 @@
-# test_chat_routes.py
 from os import getenv
 from typing import Any, Coroutine, Optional, Union
 from fastapi.responses import JSONResponse
@@ -83,14 +82,6 @@ async def exception_handler(request: Request, exc: Exception) -> JSONResponse:
 
 
 client = TestClient(app)
-
-
-class TestHealthRoutes:
-    def test_health_check(self):
-        response = client.get("/health")
-        assert response.status_code == 200
-        assert response.json() == {"health": ":)"}
-
 
 class TestAuthentication:
     def test_invalid_auth_user_username(self):

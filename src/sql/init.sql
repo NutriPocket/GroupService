@@ -14,11 +14,4 @@ $do$;
 -- Connect to the newly created database
 \c database
 
--- Create the table 'foods'
-CREATE TABLE IF NOT EXISTS foods (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    description TEXT,
-    price NUMERIC(10, 2) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+\i src/sql/tables.sql;
