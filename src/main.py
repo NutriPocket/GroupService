@@ -45,7 +45,9 @@ if __name__ == "__main__":
     logging.basicConfig(
         level=logging.INFO, format='%(name)s - %(levelname)s - %(message)s - %(asctime)s', filename='logs.log')
 
-    dotenv.load_dotenv()
+    env_path: str = getenv("ENV_PATH") or ".env"
+
+    dotenv.load_dotenv(env_path)
 
     HOST: str = getenv("HOST") or "0.0.0.0"
     PORT: int = int(getenv("PORT") or 8080)

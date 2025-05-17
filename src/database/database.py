@@ -3,8 +3,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.pool import QueuePool
 
 DATABASE_URL = getenv(
-    "DATABASE_URL") or "postgresql://user:password@localhost/database"
+    "DATABASE_URL")
 
+print(f"Connecting to database at {DATABASE_URL}")
 
 engine = create_engine(
     DATABASE_URL,
