@@ -1,32 +1,30 @@
-name: food_service
+name: group_service
 
 services:
-    database:
-        image: postgres:latest
-        container_name: postgres_service
-        environment:
-            POSTGRES_USER: user
-            POSTGRES_PASSWORD: password
-            POSTGRES_DB: database
-        ports:
-            - "5432:5432"
-        volumes:
-            - postgres_data:/var/lib/postgresql/data
-            - ./src/sql/init.sql:/docker-entrypoint-initdb.d/init.sql
-            - ./src/sql/tables.sql:/src/sql/tables.sql
-    app:
-        build:
-            context: .
-            dockerfile: Dockerfile
-        container_name: app_service
-        environment:
-            DATABASE_URL: postgresql://user:password@database:5432/database
-        ports:
-            - "8083:8083"
-        volumes:
-            - ./.env:/.env:ro
-        depends_on:
-            - database
+  database:
+    image: postgres:latest
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: database
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./src/sql/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./src/sql/tables.sql:/src/sql/tables.sql
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://user:password@database:5432/database
+    ports:
+      - "8083:8083"
+    volumes:
+      - ./.env:/.env:ro
+    depends_on:
+      - database
 
 volumes:
-    postgres_data:
+  postgres_data:
