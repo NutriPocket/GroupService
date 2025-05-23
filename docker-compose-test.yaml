@@ -1,4 +1,4 @@
-name: food_service
+name: group_service
 
 services:
     database:

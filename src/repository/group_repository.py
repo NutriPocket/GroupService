@@ -1,4 +1,5 @@
 from abc import ABCMeta, abstractmethod
+from tkinter import W
 from typing import Any, Optional
 from uuid import uuid4
 from sqlalchemy import Engine, text
@@ -7,6 +8,7 @@ from database.database import engine
 from models.errors.errors import EntityAlreadyExistsError
 from models.group import GroupDTO, GroupReturn
 from models.member import Member
+from models.routine import RoutineDTO, RoutineReturn
 
 
 class IGroupRepository(metaclass=ABCMeta):
@@ -28,6 +30,14 @@ class IGroupRepository(metaclass=ABCMeta):
 
     @abstractmethod
     def get_group_members(self, group_id: str) -> list[Member]:
+        pass
+
+    @abstractmethod
+    def save_routine(self, group_id: str, routine: RoutineDTO) -> None:
+        pass
+
+    @abstractmethod
+    def get_routines(self, group_id: str) -> list[RoutineReturn]:
         pass
 
 
@@ -139,3 +149,42 @@ class GroupRepository(IGroupRepository):
             result = connection.execute(query, params).fetchall()
 
         return [Member(**row._mapping) for row in result]
+
+    def save_routine(self, group_id: str, routine: RoutineDTO) -> None:
+        query = text(
+            """
+            INSERT INTO group_routines (id, group_id, name, description, day, start_hour, end_hour)
+            VALUES (:id, :group_id, :name, :description, :day, :start_hour, :end_hour)
+            """
+        )
+
+        params: dict[str, Any] = {
+            "id": str(uuid4()),
+            "group_id": group_id,
+            "name": routine.name,
+            "description": routine.description,
+            "day": routine.day,
+            "start_hour": routine.start_hour,
+            "end_hour": routine.end_hour
+        }
+
+        with self.engine.begin() as connection:
+            connection.execute(query, params)
+
+    def get_routines(self, group_id: str) -> list[RoutineReturn]:
+        query = text(
+            """
+            SELECT id, group_id, name, description, day, start_hour, end_hour, created_at, updated_at
+            FROM group_routines
+            WHERE group_id = :group_id
+            """
+        )
+
+        params: dict[str, Any] = {
+            "group_id": group_id
+        }
+
+        with self.engine.begin() as connection:
+            result = connection.execute(query, params).fetchall()
+
+        return [RoutineReturn(**row._mapping) for row in result]
