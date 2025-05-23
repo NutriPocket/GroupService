@@ -13,3 +13,15 @@ CREATE TABLE IF NOT EXISTS group_members (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (group_id, user_id)
 );
+
+CREATE TABLE IF NOT EXISTS group_routines (
+    id VARCHAR(36) PRIMARY KEY,
+    group_id VARCHAR(36) NOT NULL,
+    name VARCHAR(64) NOT NULL,
+    description VARCHAR(512),
+    day VARCHAR(10) NOT NULL,
+    start_hour SMALLINT NOT NULL,
+    end_hour SMALLINT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
