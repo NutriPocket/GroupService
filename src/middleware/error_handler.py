@@ -14,7 +14,8 @@ def error_handler(request: Request, e: Exception) -> JSONResponse:
                 type="about:blank",
                 title="Validation error",
                 status=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=str(e),
+                detail=" & ".join(
+                    [f"{err['loc'][1]}: {err['msg']}, got \'{err['input']}\'" for err in e.errors()]),
                 instance=str(request.url)
             )
 
@@ -24,7 +25,7 @@ def error_handler(request: Request, e: Exception) -> JSONResponse:
                 dict(content),
                 status_code=content.status
             )
-            
+
         case CustomHTTPException():
             content = ErrorDTO(
                 type="about:blank",
