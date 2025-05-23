@@ -1,5 +1,7 @@
 FROM python:3.13-alpine
 
+RUN apk add --no-cache tcl-dev tk-dev
+
 WORKDIR /code
 
 COPY requirements.txt /code/requirements.txt
