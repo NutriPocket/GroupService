@@ -1,5 +1,5 @@
 from typing import Optional
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Path, Query, status
 from fastapi.responses import JSONResponse
 
 from controller.group_controller import GroupController
@@ -81,7 +81,16 @@ def post_group(group: GroupDTO) -> CustomResponse[GroupReturn]:
         },
     }
 )
-def get_group(group_id: str) -> CustomResponse[GroupReturn]:
+def get_group(
+    group_id: str = Path(
+        ...,
+        description="ID of the group",
+        examples=["123e4567-e89b-12d3-a456-426614174000"],
+        title="UUID",
+        min_length=36, max_length=36,
+        pattern="^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    )
+) -> CustomResponse[GroupReturn]:
     return GroupController().get_group(group_id)
 
 
@@ -116,7 +125,15 @@ def get_group(group_id: str) -> CustomResponse[GroupReturn]:
         },
     }
 )
-def get_user_groups(user_id: str) -> CustomResponse[list[GroupReturn]]:
+def get_user_groups(
+        user_id: str = Path(
+            ...,
+            description="ID of the user",
+            examples=["123e4567-e89b-12d3-a456-426614174000"],
+            title="UUID",
+            min_length=36, max_length=36,
+            pattern="^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        )) -> CustomResponse[list[GroupReturn]]:
     return GroupController().get_user_groups(user_id)
 
 
@@ -155,7 +172,23 @@ def get_user_groups(user_id: str) -> CustomResponse[list[GroupReturn]]:
         },
     }
 )
-def post_member(group_id: str, user_id: str) -> CustomResponse[list[Member]]:
+def post_member(
+    group_id: str = Path(
+        ...,
+        description="ID of the group",
+        examples=["123e4567-e89b-12d3-a456-426614174000"],
+        title="UUID",
+        min_length=36, max_length=36,
+        pattern="^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    ), user_id: str = Path(
+        ...,
+        description="ID of the user",
+        examples=["123e4567-e89b-12d3-a456-426614174000"],
+        title="UUID",
+        min_length=36, max_length=36,
+        pattern="^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    )
+) -> CustomResponse[list[Member]]:
     return GroupController().post_member(group_id, user_id)
 
 
@@ -194,7 +227,16 @@ def post_member(group_id: str, user_id: str) -> CustomResponse[list[Member]]:
         },
     }
 )
-def get_group_members(group_id: str) -> CustomResponse[list[Member]]:
+def get_group_members(
+    group_id: str = Path(
+        ...,
+        description="ID of the group",
+        examples=["123e4567-e89b-12d3-a456-426614174000"],
+        title="UUID",
+        min_length=36, max_length=36,
+        pattern="^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    )
+) -> CustomResponse[list[Member]]:
     return GroupController().get_group_members(group_id)
 
 
@@ -235,7 +277,14 @@ def get_group_members(group_id: str) -> CustomResponse[list[Member]]:
 )
 def post_group_routine(
     routine: RoutineDTO,
-    group_id: str,
+    group_id: str = Path(
+        ...,
+        description="ID of the group",
+        examples=["123e4567-e89b-12d3-a456-426614174000"],
+        title="UUID",
+        min_length=36, max_length=36,
+        pattern="^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    ),
     forceMembers: bool = Query(
         False,
         description="""
@@ -286,6 +335,13 @@ def post_group_routine(
     }
 )
 def get_group_routines(
-    group_id: str,
+    group_id: str = Path(
+        ...,
+        description="ID of the group",
+        examples=["123e4567-e89b-12d3-a456-426614174000"],
+        title="UUID",
+        min_length=36, max_length=36,
+        pattern="^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    ),
 ) -> CustomResponse[list[RoutineReturn]]:
     return GroupController().get_group_routines(group_id)
