@@ -1,10 +1,12 @@
-from fastapi import APIRouter, status
+from typing import Optional
+from fastapi import APIRouter, Query, status
 from fastapi.responses import JSONResponse
 
 from controller.group_controller import GroupController
 from models.group import GroupDTO, GroupReturn
 from models.member import Member
 from models.response import CustomResponse, ErrorDTO
+from models.routine import PostRoutineParams, RoutineDTO, RoutineReturn
 
 router = APIRouter()
 
@@ -194,3 +196,96 @@ def post_member(group_id: str, user_id: str) -> CustomResponse[list[Member]]:
 )
 def get_group_members(group_id: str) -> CustomResponse[list[Member]]:
     return GroupController().get_group_members(group_id)
+
+
+@router.post(
+    "/groups/{group_id}/routines",
+    summary="Post a new routine for group: {group_id}",
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        status.HTTP_201_CREATED: {
+            "model": CustomResponse[list[RoutineReturn]],
+            "description": "Routine posted successfully for group {group_id}"
+        },
+        status.HTTP_400_BAD_REQUEST: {
+            "model": ErrorDTO,
+            "description": "Bad request"
+        },
+        status.HTTP_401_UNAUTHORIZED: {
+            "model": ErrorDTO,
+            "description": "User unauthorized"
+        },
+        status.HTTP_403_FORBIDDEN: {
+            "model": ErrorDTO,
+            "description": "No authorization provided"
+        },
+        status.HTTP_404_NOT_FOUND: {
+            "model": ErrorDTO,
+            "description": "Group with id {group_id} not found"
+        },
+        status.HTTP_422_UNPROCESSABLE_ENTITY: {
+            "model": ErrorDTO,
+            "description": "Unprocessable entity, body must match the schema"
+        },
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {
+            "model": ErrorDTO,
+            "description": "Internal server error"
+        },
+    }
+)
+def post_group_routine(
+    routine: RoutineDTO,
+    group_id: str,
+    forceMembers: bool = Query(
+        False,
+        description="""
+            This parameter is used to ignore schedules 
+            that are incompatible with individual members' routines.
+            In other words, if this parameter is true, this service does not check
+            whether all members can meet this new schedule.
+        """)
+) -> CustomResponse[list[RoutineReturn]]:
+    params: PostRoutineParams = PostRoutineParams(forceMembers=forceMembers)
+
+    return GroupController().post_group_routine(group_id, routine, params)
+
+
+@router.get(
+    "/groups/{group_id}/routines",
+    summary="Get all routines for group: {group_id}",
+    status_code=status.HTTP_200_OK,
+    responses={
+        status.HTTP_200_OK: {
+            "model": CustomResponse[list[RoutineReturn]],
+            "description": "Group {group_id} routines retrieved successfully"
+        },
+        status.HTTP_400_BAD_REQUEST: {
+            "model": ErrorDTO,
+            "description": "Bad request"
+        },
+        status.HTTP_401_UNAUTHORIZED: {
+            "model": ErrorDTO,
+            "description": "User unauthorized"
+        },
+        status.HTTP_403_FORBIDDEN: {
+            "model": ErrorDTO,
+            "description": "No authorization provided"
+        },
+        status.HTTP_404_NOT_FOUND: {
+            "model": ErrorDTO,
+            "description": "Group with id {group_id} not found"
+        },
+        status.HTTP_422_UNPROCESSABLE_ENTITY: {
+            "model": ErrorDTO,
+            "description": "Unprocessable entity, body must match the schema"
+        },
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {
+            "model": ErrorDTO,
+            "description": "Internal server error"
+        },
+    }
+)
+def get_group_routines(
+    group_id: str,
+) -> CustomResponse[list[RoutineReturn]]:
+    return GroupController().get_group_routines(group_id)
