@@ -1,8 +1,8 @@
 test:
-	docker-compose -f docker-compose-test.yaml up -d
+	docker compose -f docker-compose-test.yaml up -d
 	sleep 15
 	cd src && ENV_PATH=../.env.test pytest -v && cd ..
-	docker-compose -f docker-compose-test.yaml down --volumes
+	docker compose -f docker-compose-test.yaml down --volumes
 .PHONY: test
 
 up:
