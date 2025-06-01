@@ -29,8 +29,7 @@ class IJWTService(ABC):
 class JWTService(IJWTService):
     def __init__(self):
         self.expires_in = timedelta(days=365)
-        key = getenv('JWT_SECRET_KEY')
-        self.secret: str = key if key else "mySup3rStr0ngDevSecretKey"
+        self.secret = getenv('JWT_SECRET_KEY', "secret")
 
         if not self.secret:
             raise ValueError("JWT_SECRET_KEY environment variable is not set")

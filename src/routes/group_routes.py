@@ -1,5 +1,5 @@
 from typing import Optional
-from fastapi import APIRouter, Path, Query, status
+from fastapi import APIRouter, Path, Query, Request, status
 from fastapi.responses import JSONResponse
 
 from controller.group_controller import GroupController
@@ -7,6 +7,7 @@ from models.group import GroupDTO, GroupReturn
 from models.member import Member
 from models.response import CustomResponse, ErrorDTO
 from models.routine import PostRoutineParams, RoutineDTO, RoutineReturn
+from tests.test_jwt import auth_header
 
 router = APIRouter()
 
@@ -265,6 +266,10 @@ def get_group_members(
             "model": ErrorDTO,
             "description": "Group with id {group_id} not found"
         },
+        status.HTTP_409_CONFLICT: {
+            "model": ErrorDTO,
+            "description": "Members have conflicting schedules with the new routine"
+        },
         status.HTTP_422_UNPROCESSABLE_ENTITY: {
             "model": ErrorDTO,
             "description": "Unprocessable entity, body must match the schema"
@@ -276,6 +281,7 @@ def get_group_members(
     }
 )
 def post_group_routine(
+    request: Request,
     routine: RoutineDTO,
     group_id: str = Path(
         ...,
@@ -285,7 +291,7 @@ def post_group_routine(
         min_length=36, max_length=36,
         pattern="^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
     ),
-    forceMembers: bool = Query(
+    force_members: bool = Query(
         False,
         description="""
             This parameter is used to ignore schedules 
@@ -294,7 +300,10 @@ def post_group_routine(
             whether all members can meet this new schedule.
         """)
 ) -> CustomResponse[list[RoutineReturn]]:
-    params: PostRoutineParams = PostRoutineParams(forceMembers=forceMembers)
+    params: PostRoutineParams = PostRoutineParams(
+        force_members=force_members, auth_header=getattr(
+            request.state, "auth_header", "")
+    )
 
     return GroupController().post_group_routine(group_id, routine, params)
 

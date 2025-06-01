@@ -49,7 +49,7 @@ if __name__ == "__main__":
 
     env_path: str = getenv("ENV_PATH", "../.env")
     env_path = os.path.abspath(env_path)
-
+    print(f"Loading environment variables from {env_path}")
     dotenv.load_dotenv(env_path, override=True, verbose=True)
 
     HOST: str = getenv("HOST", "0.0.0.0")

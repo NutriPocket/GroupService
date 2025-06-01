@@ -15,8 +15,17 @@ class ValidationError(CustomHTTPException):
     def __init__(self, **kwargs):
         super().__init__(
             status=kwargs.get("status") or status.HTTP_400_BAD_REQUEST,
-            detail=kwargs.get("detail") or "",
-            title=kwargs.get("title") or "ValidationError"
+            detail=kwargs.get("detail", ""),
+            title=kwargs.get("title", "ValidationError")
+        )
+
+
+class ConflictError(CustomHTTPException):
+    def __init__(self, **kwargs):
+        super().__init__(
+            status=kwargs.get("status") or status.HTTP_409_CONFLICT,
+            detail=kwargs.get("detail", ""),
+            title=kwargs.get("title", "ConflictError")
         )
 
 
@@ -24,8 +33,8 @@ class EntityAlreadyExistsError(CustomHTTPException):
     def __init__(self, **kwargs):
         super().__init__(
             status=kwargs.get("status") or status.HTTP_409_CONFLICT,
-            detail=kwargs.get("detail") or "",
-            title=kwargs.get("title") or "Entity already exists"
+            detail=kwargs.get("detail", ""),
+            title=kwargs.get("title", "Entity already exists")
         )
 
 
@@ -47,10 +56,10 @@ class NotFoundError(CustomHTTPException):
         )
 
 
-class ServiceUnavailableError(CustomHTTPException):
+class BadGatewayError(CustomHTTPException):
     def __init__(self):
         super().__init__(
-            status=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Service unavailable",
-            title="ServiceUnavailableError"
+            status=status.HTTP_502_BAD_GATEWAY,
+            detail="Bad gateway",
+            title="BadGatewayError"
         )

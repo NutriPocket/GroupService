@@ -7,6 +7,7 @@ from models.response import CustomResponse
 from models.routine import PostRoutineParams, RoutineDTO, RoutineReturn
 from service.group_service import GroupService, IGroupService
 
+
 class GroupController:
     def __init__(self, service: Optional[IGroupService] = None):
         self.service = service or GroupService()
@@ -37,13 +38,7 @@ class GroupController:
         return CustomResponse(data=members)
 
     def post_group_routine(self, group_id: str, routine: RoutineDTO, params: PostRoutineParams) -> CustomResponse[list[RoutineReturn]]:
-        if not params.forceMembers:
-            # 1. Get this group members
-            # 2. Get from ProgressService users routines
-            # 3. Check if any of the users have a routine in the same day and hour (in service)
-            pass
-
-        group = self.service.save_routine(group_id, routine)
+        group = self.service.save_routine(group_id, routine, params)
 
         return CustomResponse(data=group)
     

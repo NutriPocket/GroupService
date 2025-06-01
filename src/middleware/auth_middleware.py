@@ -48,5 +48,7 @@ class JWTMiddleware:
         payload = self.jwt_service.verify(token)
 
         request.state.user = payload
+        request.state.auth_header = f"Bearer {token}"
+        
         response = await call_next(request)
         return response
