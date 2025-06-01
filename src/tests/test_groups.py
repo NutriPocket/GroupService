@@ -4,18 +4,24 @@ from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 from fastapi import FastAPI, Request, status
 
+from models.errors.errors import CustomHTTPException
+from models.member import Member
+from models.routine import Schedule
 from repository.group_repository import GroupRepository
 from routes.group_routes import router as group_router
 from middleware.error_handler import error_handler
 from controller.group_controller import GroupController
 from database.database import engine
 from sqlalchemy import text
+
+from service.group_service import GroupService
 app = FastAPI()
 
 app.include_router(group_router, tags=["groups"])
 
 
 @app.exception_handler(RequestValidationError)
+@app.exception_handler(CustomHTTPException)
 @app.exception_handler(Exception)
 async def exception_handler(request: Request, exc: Exception) -> JSONResponse:
     return error_handler(request, exc)
@@ -29,6 +35,7 @@ def run_around_tests():
     with engine.begin() as conn:
         conn.execute(text("DELETE FROM groups"))
         conn.execute(text("DELETE FROM group_members"))
+        conn.execute(text("DELETE FROM group_routines"))
 
 
 class TestGroupRoutes:
@@ -43,6 +50,7 @@ class TestGroupRoutes:
     invalid_group_id = "invalid_group_id"
     not_found_group_id = "3cdba348-0279-4634-9bcd-c8ea1d2856af"
     valid_user_id = "1cdba348-0279-4634-9bcd-c8ea1d2856af"
+    another_valid_user_id = "2cdba348-0279-4634-9bcd-c8ea1d2856af"
     invalid_user_id = "invalid_user_id"
 
     """
@@ -256,7 +264,19 @@ class TestGroupRoutes:
         POST /groups/{group_id}/routines/
     """
 
-    def test_post_group_routine_success(self):
+    def test_post_group_routine_success(self, monkeypatch):
+        def mock_free_schedules(self, members: list[Member], auth_header: str) -> list[Schedule]:
+            return [
+                Schedule(
+                    day="Monday",  # type: ignore
+                    start_hour=8,
+                    end_hour=15,
+                ),
+            ]
+
+        monkeypatch.setattr(
+            GroupService, "get_free_schedules", mock_free_schedules)
+
         response = client.post("/groups", json=self.valid_group)
 
         group_id = response.json()["data"]["id"]
@@ -266,11 +286,12 @@ class TestGroupRoutes:
             "description": "Test Routine Description",
             "day": "Monday",
             "start_hour": 9,
-            "end_hour": 10
+            "end_hour": 10,
+            "creator_id": self.valid_user_id
         }
 
         response = client.post(
-            f"/groups/{group_id}/routines", json=routine)
+            f"/groups/{group_id}/routines?force_members=true", json=routine)
         assert response.status_code == status.HTTP_201_CREATED
         assert "data" in response.json()
         assert isinstance(response.json()["data"], list)
@@ -287,13 +308,180 @@ class TestGroupRoutes:
         assert response.json()["data"][0]["created_at"] is not None
         assert response.json()["data"][0]["updated_at"] is not None
 
+    def test_post_group_routine_with_user_schedules_colision(self, monkeypatch):
+        def mock_free_schedules(self, members: list[Member], auth_header: str) -> list[Schedule]:
+            return [
+                Schedule(
+                    day="Monday",  # type: ignore
+                    start_hour=9,
+                    end_hour=10,
+                ),
+            ]
+
+        monkeypatch.setattr(
+            GroupService, "get_free_schedules", mock_free_schedules)
+
+        response = client.post("/groups", json=self.valid_group)
+
+        group_id = response.json()["data"]["id"]
+
+        routine = {
+            "name": "Test Routine",
+            "description": "Test Routine Description",
+            "day": "Monday",
+            "start_hour": 8,
+            "end_hour": 11,
+            "creator_id": self.valid_user_id
+        }
+
+        response = client.post(
+            f"/groups/{group_id}/routines?force_members=false", json=routine)
+        assert response.status_code == status.HTTP_409_CONFLICT
+        assert "There are members with conflicting routines" == response.json()[
+            "detail"]
+        assert "Conflict in routine schedules" == response.json()["title"]
+        assert "about:blank" == response.json()["type"]
+        assert 409 == response.json()["status"]
+
+    def test_post_group_routine_without_user_schedules_colision(self, monkeypatch):
+        def mock_free_schedules(self, members: list[Member], auth_header: str) -> list[Schedule]:
+            return [
+                Schedule(
+                    day="Monday",  # type: ignore
+                    start_hour=8,
+                    end_hour=15,
+                ),
+            ]
+
+        monkeypatch.setattr(
+            GroupService, "get_free_schedules", mock_free_schedules)
+
+        response = client.post("/groups", json=self.valid_group)
+
+        group_id = response.json()["data"]["id"]
+
+        routine = {
+            "name": "Test Routine",
+            "description": "Test Routine Description",
+            "day": "Monday",
+            "start_hour": 9,
+            "end_hour": 10,
+            "creator_id": self.valid_user_id
+        }
+
+        response = client.post(
+            f"/groups/{group_id}/routines?force_members=false", json=routine)
+        assert response.status_code == status.HTTP_201_CREATED
+        assert "data" in response.json()
+        assert isinstance(response.json()["data"], list)
+        assert len(response.json()["data"]) > 0
+
+    def test_post_group_routine_with_user_groups_schedules_collision(self, monkeypatch):
+        def mock_get_user_groups_routines_schedules(self, members: list[Member]) -> list[Schedule]:
+            return [
+                Schedule(
+                    day="Monday",  # type: ignore
+                    start_hour=9,
+                    end_hour=10,
+                ),
+            ]
+
+        monkeypatch.setattr(
+            GroupRepository, "get_user_groups_routines_schedules", mock_get_user_groups_routines_schedules
+        )
+
+        response = client.post("/groups", json=self.valid_group)
+
+        group_id = response.json()["data"]["id"]
+
+        routine = {
+            "name": "Test Routine",
+            "description": "Test Routine Description",
+            "day": "Monday",
+            "start_hour": 9,
+            "end_hour": 10,
+            "creator_id": self.valid_user_id
+        }
+
+        response = client.post(
+            f"/groups/{group_id}/routines?force_members=false", json=routine)
+        assert response.status_code == status.HTTP_409_CONFLICT
+        assert f"Conflicting member routine on Monday from 9 to 10" == response.json()[
+            "detail"]
+        assert "Conflict in routine schedules" == response.json()[
+            "title"]
+        assert "about:blank" == response.json()["type"]
+        assert 409 == response.json()["status"]
+
+    def test_post_group_routine_without_user_groups_schedules_collision(self, monkeypatch):
+        def mock_get_user_groups_routines_schedules(self, members: list[Member]) -> list[Schedule]:
+            return []
+
+        monkeypatch.setattr(
+            GroupRepository, "get_user_groups_routines_schedules", mock_get_user_groups_routines_schedules
+        )
+
+        def mock_free_schedules(self, members: list[Member], auth_header: str) -> list[Schedule]:
+            return [
+                Schedule(
+                    day="Monday",  # type: ignore
+                    start_hour=8,
+                    end_hour=15,
+                ),
+            ]
+
+        monkeypatch.setattr(
+            GroupService, "get_free_schedules", mock_free_schedules)
+
+        response = client.post("/groups", json=self.valid_group)
+
+        group_id = response.json()["data"]["id"]
+
+        routine = {
+            "name": "Test Routine",
+            "description": "Test Routine Description",
+            "day": "Monday",
+            "start_hour": 9,
+            "end_hour": 10,
+            "creator_id": self.valid_user_id
+        }
+
+        response = client.post(
+            f"/groups/{group_id}/routines?force_members=false", json=routine)
+        assert response.status_code == status.HTTP_201_CREATED
+        assert "data" in response.json()
+        assert isinstance(response.json()["data"], list)
+        assert len(response.json()["data"]) > 0
+
+    def test_post_routine_without_being_a_member(self):
+        response = client.post("/groups", json=self.valid_group)
+
+        group_id = response.json()["data"]["id"]
+
+        routine = {
+            "name": "Test Routine",
+            "description": "Test Routine Description",
+            "day": "Monday",
+            "start_hour": 9,
+            "end_hour": 10,
+            "creator_id": self.another_valid_user_id
+        }
+
+        response = client.post(
+            f"/groups/{group_id}/routines?force_members=false", json=routine)
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+        assert f"User with id {self.another_valid_user_id} is not a member of group {group_id}" == response.json()[
+            "detail"]
+        assert "AuthenticationError" == response.json()["title"]
+
     def test_post_group_routine_with_bad_uuid(self):
         routine = {
             "name": "Test Routine",
             "description": "Test Routine Description",
             "day": "Monday",
             "start_hour": 9,
-            "end_hour": 10
+            "end_hour": 10,
+            "creator_id": self.valid_user_id
         }
 
         response = client.post(
@@ -308,7 +496,8 @@ class TestGroupRoutes:
             "description": "Test Routine Description",
             "day": "Monday",
             "start_hour": 9,
-            "end_hour": 10
+            "end_hour": 10,
+            "creator_id": self.valid_user_id
         }
 
         response = client.post(
@@ -333,7 +522,19 @@ class TestGroupRoutes:
         assert len(response.json()["data"]) == 0
         assert response.json()["data"] == []
 
-    def test_get_group_routines_success(self):
+    def test_get_group_routines_success(self, monkeypatch):
+        def mock_free_schedules(self, members: list[Member], auth_header: str) -> list[Schedule]:
+            return [
+                Schedule(
+                    day="Monday",  # type: ignore
+                    start_hour=8,
+                    end_hour=15,
+                ),
+            ]
+
+        monkeypatch.setattr(
+            GroupService, "get_free_schedules", mock_free_schedules)
+
         response = client.post("/groups", json=self.valid_group)
 
         group_id = response.json()["data"]["id"]
@@ -343,7 +544,8 @@ class TestGroupRoutes:
             "description": "Test Routine Description",
             "day": "Monday",
             "start_hour": 9,
-            "end_hour": 10
+            "end_hour": 10,
+            "creator_id": self.valid_user_id
         }
 
         client.post(

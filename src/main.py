@@ -16,6 +16,7 @@ from routes import group_routes, health_routes
 
 app = FastAPI()
 
+
 @app.exception_handler(RequestValidationError)
 @app.exception_handler(HTTPException)
 @app.exception_handler(Exception)
@@ -48,8 +49,8 @@ if __name__ == "__main__":
 
     env_path: str = getenv("ENV_PATH", "../.env")
     env_path = os.path.abspath(env_path)
-
-    dotenv.load_dotenv(env_path)
+    print(f"Loading environment variables from {env_path}")
+    dotenv.load_dotenv(env_path, override=True, verbose=True)
 
     HOST: str = getenv("HOST", "0.0.0.0")
     PORT: int = int(getenv("PORT", 8083))

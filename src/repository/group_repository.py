@@ -8,7 +8,7 @@ from database.database import engine
 from models.errors.errors import EntityAlreadyExistsError
 from models.group import GroupDTO, GroupReturn
 from models.member import Member
-from models.routine import RoutineDTO, RoutineReturn
+from models.routine import RoutineDTO, RoutineReturn, Schedule
 
 
 class IGroupRepository(metaclass=ABCMeta):
@@ -38,6 +38,10 @@ class IGroupRepository(metaclass=ABCMeta):
 
     @abstractmethod
     def get_routines(self, group_id: str) -> list[RoutineReturn]:
+        pass
+    
+    @abstractmethod
+    def get_user_groups_routines_schedules(self, users: list[str]) -> list[Schedule]:
         pass
 
 
@@ -153,8 +157,8 @@ class GroupRepository(IGroupRepository):
     def save_routine(self, group_id: str, routine: RoutineDTO) -> None:
         query = text(
             """
-            INSERT INTO group_routines (id, group_id, name, description, day, start_hour, end_hour)
-            VALUES (:id, :group_id, :name, :description, :day, :start_hour, :end_hour)
+            INSERT INTO group_routines (id, group_id, name, description, day, start_hour, end_hour, creator_id)
+            VALUES (:id, :group_id, :name, :description, :day, :start_hour, :end_hour, :creator_id)
             """
         )
 
@@ -165,7 +169,8 @@ class GroupRepository(IGroupRepository):
             "description": routine.description,
             "day": routine.day,
             "start_hour": routine.start_hour,
-            "end_hour": routine.end_hour
+            "end_hour": routine.end_hour,
+            "creator_id": routine.creator_id
         }
 
         with self.engine.begin() as connection:
@@ -174,7 +179,7 @@ class GroupRepository(IGroupRepository):
     def get_routines(self, group_id: str) -> list[RoutineReturn]:
         query = text(
             """
-            SELECT id, group_id, name, description, day, start_hour, end_hour, created_at, updated_at
+            SELECT id, group_id, name, description, day, start_hour, end_hour, created_at, updated_at, creator_id
             FROM group_routines
             WHERE group_id = :group_id
             """
@@ -188,3 +193,22 @@ class GroupRepository(IGroupRepository):
             result = connection.execute(query, params).fetchall()
 
         return [RoutineReturn(**row._mapping) for row in result]
+
+    def get_user_groups_routines_schedules(self, users: list[str]) -> list[Schedule]:
+        query = text(
+            """
+            SELECT day, start_hour, end_hour
+            FROM group_members gm
+            JOIN group_routines gr ON gm.group_id = gr.group_id
+            WHERE creator_id IN :users
+            """
+        )
+
+        params: dict[str, Any] = {
+            "users": tuple(users)
+        }
+
+        with self.engine.begin() as connection:
+            result = connection.execute(query, params).fetchall()
+
+        return [Schedule(**row._mapping) for row in result]

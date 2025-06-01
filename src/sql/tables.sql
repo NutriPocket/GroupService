@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS group_members (
 CREATE TABLE IF NOT EXISTS group_routines (
     id VARCHAR(36) PRIMARY KEY,
     group_id VARCHAR(36) NOT NULL,
+    creator_id VARCHAR(36) NOT NULL,
     name VARCHAR(64) NOT NULL,
     description VARCHAR(512),
     day VARCHAR(10) NOT NULL,
