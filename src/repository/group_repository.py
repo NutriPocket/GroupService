@@ -6,9 +6,11 @@ from sqlalchemy import Engine, text
 from sqlalchemy.exc import IntegrityError
 from database.database import engine
 from models.errors.errors import EntityAlreadyExistsError
+from models.event import EventDTO, EventReturn
 from models.group import GroupDTO, GroupReturn
 from models.member import Member
 from models.routine import RoutineDTO, RoutineReturn, Schedule
+from datetime import datetime
 
 
 class IGroupRepository(metaclass=ABCMeta):
@@ -39,9 +41,33 @@ class IGroupRepository(metaclass=ABCMeta):
     @abstractmethod
     def get_routines(self, group_id: str) -> list[RoutineReturn]:
         pass
-    
+
     @abstractmethod
     def get_user_groups_routines_schedules(self, users: list[str]) -> list[Schedule]:
+        pass
+
+    @abstractmethod
+    def save_event(self, group_id: str, event: EventDTO) -> Optional[EventReturn]:
+        pass
+
+    @abstractmethod
+    def get_event(self, group_id: str, event_id: str) -> Optional[EventReturn]:
+        pass
+
+    @abstractmethod
+    def update_event(self, group_id: str, event_id: str, event: EventDTO) -> Optional[EventReturn]:
+        pass
+
+    @abstractmethod
+    def get_events(self, group_id: str) -> list[EventReturn]:
+        pass
+
+    @abstractmethod
+    def delete_event(self, group_id: str, event_id: str) -> None:
+        pass
+
+    @abstractmethod
+    def find_group_colliding_events(self, group_id: str, date: datetime, start_hour: int, end_hour: int) -> list[EventReturn]:
         pass
 
 
@@ -212,3 +238,147 @@ class GroupRepository(IGroupRepository):
             result = connection.execute(query, params).fetchall()
 
         return [Schedule(**row._mapping) for row in result]
+
+    def save_event(self, group_id: str, event: EventDTO) -> Optional[EventReturn]:
+        """Save a new event for a group"""
+        query = text(
+            """
+            INSERT INTO group_events (id, group_id, creator_id, name, description, date, start_hour, end_hour)
+            VALUES (:id, :group_id, :creator_id, :name, :description, :date, :start_hour, :end_hour)
+            RETURNING id, group_id, creator_id, name, description, date, start_hour, end_hour, created_at, updated_at
+            """
+        )
+
+        params: dict[str, Any] = {
+            "id": str(uuid4()),
+            "group_id": group_id,
+            "creator_id": event.creator_id,
+            "name": event.name,
+            "description": event.description,
+            "date": event.date,
+            "start_hour": event.start_hour,
+            "end_hour": event.end_hour
+        }
+
+        with self.engine.begin() as connection:
+            result = connection.execute(query, params).fetchone()
+
+        if result:
+            return EventReturn(**result._mapping)
+
+    def get_event(self, group_id: str, event_id: str) -> Optional[EventReturn]:
+        """Get a specific event by ID for a group"""
+        query = text(
+            """
+            SELECT id, group_id, creator_id, name, description, date, start_hour, end_hour, created_at, updated_at
+            FROM group_events
+            WHERE group_id = :group_id AND id = :event_id
+            """
+        )
+
+        params: dict[str, Any] = {
+            "group_id": group_id,
+            "event_id": event_id
+        }
+
+        with self.engine.begin() as connection:
+            result = connection.execute(query, params).fetchone()
+
+        if result:
+            return EventReturn(**result._mapping)
+        return None
+
+    def update_event(self, group_id: str, event_id: str, event: EventDTO) -> Optional[EventReturn]:
+        """Update an existing event"""
+        query = text(
+            """
+            UPDATE group_events
+            SET name = :name,
+                description = :description,
+                date = :date,
+                start_hour = :start_hour,
+                end_hour = :end_hour,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE group_id = :group_id AND id = :event_id
+            RETURNING id, group_id, creator_id, name, description, date, start_hour, end_hour, created_at, updated_at
+            """
+        )
+
+        params: dict[str, Any] = {
+            "group_id": group_id,
+            "event_id": event_id,
+            "name": event.name,
+            "description": event.description,
+            "date": event.date,
+            "start_hour": event.start_hour,
+            "end_hour": event.end_hour
+        }
+
+        with self.engine.begin() as connection:
+            result = connection.execute(query, params).fetchone()
+
+        if result:
+            return EventReturn(**result._mapping)
+        return None
+
+    def get_events(self, group_id: str) -> list[EventReturn]:
+        """Get all events for a group"""
+        query = text(
+            """
+            SELECT id, group_id, creator_id, name, description, date, start_hour, end_hour, created_at, updated_at
+            FROM group_events
+            WHERE group_id = :group_id
+            ORDER BY date, start_hour
+            """
+        )
+
+        params: dict[str, Any] = {
+            "group_id": group_id
+        }
+
+        with self.engine.begin() as connection:
+            result = connection.execute(query, params).fetchall()
+
+        return [EventReturn(**row._mapping) for row in result]
+
+    def delete_event(self, group_id: str, event_id: str) -> None:
+        """Delete an event from a group"""
+        query = text(
+            """
+            DELETE FROM group_events
+            WHERE group_id = :group_id AND id = :event_id
+            """
+        )
+
+        params: dict[str, Any] = {
+            "group_id": group_id,
+            "event_id": event_id
+        }
+
+        with self.engine.begin() as connection:
+            connection.execute(query, params)
+
+    def find_group_colliding_events(self, group_id: str, date: datetime, start_hour: int, end_hour: int) -> list[EventReturn]:
+        """Find events that collide with a new event being created"""
+        query = text(
+            """
+            SELECT id, group_id, creator_id, name, description, date, start_hour, end_hour, created_at, updated_at
+            FROM group_events
+            WHERE group_id = :group_id AND date = :date
+            AND (
+                (start_hour <= :end_hour AND end_hour >= :start_hour)
+            )
+            """
+        )
+
+        params: dict[str, Any] = {
+            "group_id": group_id,
+            "date": date,
+            "start_hour": start_hour,
+            "end_hour": end_hour
+        }
+
+        with self.engine.begin() as connection:
+            result = connection.execute(query, params).fetchall()
+
+        return [EventReturn(**row._mapping) for row in result] if result else []

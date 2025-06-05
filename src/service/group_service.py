@@ -1,9 +1,12 @@
 from abc import ABCMeta, abstractmethod
+from datetime import date
+import datetime
 import logging
 from os import getenv
 from typing import Optional
 
-from models.errors.errors import AuthenticationError, BadGatewayError, ConflictError, NotFoundError
+from models.errors.errors import AuthenticationError, BadGatewayError, ConflictError, NotFoundError, ValidationError
+from models.event import EventDTO, EventReturn
 from models.group import GroupDTO, GroupReturn
 from models.member import Member
 from models.routine import PostRoutineParams, RoutineDTO, RoutineReturn, Schedule
@@ -38,6 +41,26 @@ class IGroupService(metaclass=ABCMeta):
 
     @abstractmethod
     def get_routines(self, group_id: str) -> list[RoutineReturn]:
+        pass
+
+    @abstractmethod
+    def save_event(self, group_id: str, event: EventDTO) -> EventReturn:
+        pass
+
+    @abstractmethod
+    def update_event(self, group_id: str, event_id: str, event: EventDTO) -> EventReturn:
+        pass
+
+    @abstractmethod
+    def get_events(self, group_id: str) -> list[EventReturn]:
+        pass
+
+    @abstractmethod
+    def get_event(self, group_id: str, event_id: str) -> EventReturn:
+        pass
+
+    @abstractmethod
+    def delete_event(self, group_id: str, event_id: str) -> None:
         pass
 
 
@@ -173,3 +196,153 @@ class GroupService(IGroupService):
             raise NotFoundError(f"Group with id {group_id} not found")
 
         return self.repository.get_routines(group_id)
+
+    def save_event(self, group_id: str, event: EventDTO) -> EventReturn:
+        """
+        Create a new event for a group
+        """
+        # Check if group exists
+        group = self.get_group(group_id)
+
+        if not group:
+            raise NotFoundError(f"Group with id {group_id} not found")
+
+        # Check if event creator is a member of the group
+        members = self.repository.get_group_members(group_id)
+        member_ids = [member.user_id for member in members]
+
+        if event.creator_id not in member_ids:
+            raise AuthenticationError(
+                f"User with id {event.creator_id} is not a member of group {group_id}"
+            )
+
+        if event.date < datetime.datetime.now():
+            raise ValidationError(
+                title="Invalid event date",
+                detail="Event date cannot be in the past"
+            )
+
+        # Check for colliding events
+        colliding_events = self.repository.find_group_colliding_events(
+            group_id, event.date, event.start_hour, event.end_hour
+        )
+
+        if colliding_events:
+            raise ConflictError(
+                title="Conflict in event schedules",
+                detail=f"Event collides with existing events: {colliding_events}"
+            )
+
+        # Save event and return it
+        ret = self.repository.save_event(group_id, event)
+
+        if not ret:
+            raise Exception("Failed to group event")
+
+        return ret
+
+    def update_event(self, group_id: str, event_id: str, event: EventDTO) -> EventReturn:
+        """
+        Update an existing event in a group
+        """
+        # Check if group exists
+        group = self.get_group(group_id)
+
+        if not group:
+            raise NotFoundError(f"Group with id {group_id} not found")
+
+        # Check if event exists
+        existing_event = self.repository.get_event(group_id, event_id)
+
+        if not existing_event:
+            raise NotFoundError(
+                f"Event with id {event_id} not found in group {group_id}")
+
+        # Check if event updater is a member of the group
+        members = self.repository.get_group_members(group_id)
+        member_ids = [member.user_id for member in members]
+
+        if event.creator_id not in member_ids:
+            raise AuthenticationError(
+                f"User with id {event.creator_id} is not a member of group {group_id}"
+            )
+
+        if existing_event.date != event.date:
+            if event.date < datetime.datetime.now():
+                raise ValidationError(
+                    title="Invalid event date",
+                    detail="Event date cannot be in the past"
+                )
+
+        # Check for colliding events
+        colliding_events = self.repository.find_group_colliding_events(
+            group_id, event.date, event.start_hour, event.end_hour
+        )
+
+        colliding_events = [e for e in colliding_events if e.id != event_id]
+
+        if colliding_events:
+            raise ConflictError(
+                title="Conflict in event schedules",
+                detail=f"Event collides with existing events: {colliding_events}"
+            )
+
+        # Update event and return it
+        ret = self.repository.update_event(group_id, event_id, event)
+
+        if not ret:
+            raise Exception("Failed to update group event")
+
+        return ret
+
+    def get_events(self, group_id: str) -> list[EventReturn]:
+        """
+        Get all events for a group
+        """
+        # Check if group exists
+        group = self.get_group(group_id)
+
+        if not group:
+            raise NotFoundError(f"Group with id {group_id} not found")
+
+        # Return all events for the group
+        return self.repository.get_events(group_id)
+
+    def get_event(self, group_id: str, event_id: str) -> EventReturn:
+        """
+        Get a specific event from a group
+        """
+        # Check if group exists
+        group = self.get_group(group_id)
+
+        if not group:
+            raise NotFoundError(f"Group with id {group_id} not found")
+
+        # Get event
+        event = self.repository.get_event(group_id, event_id)
+
+        if not event:
+            raise NotFoundError(
+                f"Event with id {event_id} not found in group {group_id}")
+
+        return event
+
+    def delete_event(self, group_id: str, event_id: str) -> None:
+        """
+        Delete an event from a group
+        """
+        # Check if group exists
+        group = self.get_group(group_id)
+
+        if not group:
+            raise NotFoundError(f"Group with id {group_id} not found")
+
+        # Check if event exists
+        event = self.repository.get_event(group_id, event_id)
+
+        if not event:
+            raise NotFoundError(
+                f"Event with id {event_id} not found in group {group_id}")
+
+        # Delete event
+        self.repository.delete_event(group_id, event_id)
