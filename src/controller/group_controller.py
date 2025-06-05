@@ -1,6 +1,7 @@
 from typing import Optional
 
 from models.errors.errors import ValidationError
+from models.event import EventDTO, EventReturn
 from models.group import GroupDTO, GroupReturn
 from models.member import Member
 from models.response import CustomResponse
@@ -46,3 +47,33 @@ class GroupController:
         routines = self.service.get_routines(group_id)
 
         return CustomResponse(data=routines)
+    
+    def post_group_event(self, group_id: str, event: EventDTO) -> CustomResponse[EventReturn]:
+        """Create a new event for a group"""
+        event_return = self.service.save_event(group_id, event)
+        
+        return CustomResponse(data=event_return)
+    
+    def patch_group_event(self, group_id: str, event_id: str, event: EventDTO) -> CustomResponse[EventReturn]:
+        """Update an existing event in a group"""
+        updated_event = self.service.update_event(group_id, event_id, event)
+        
+        return CustomResponse(data=updated_event)
+    
+    def get_group_events(self, group_id: str) -> CustomResponse[list[EventReturn]]:
+        """Get all events for a group"""
+        events = self.service.get_events(group_id)
+        
+        return CustomResponse(data=events)
+    
+    def get_group_event(self, group_id: str, event_id: str) -> CustomResponse[EventReturn]:
+        """Get a specific event from a group"""
+        event = self.service.get_event(group_id, event_id)
+        
+        return CustomResponse(data=event)
+    
+    def delete_group_event(self, group_id: str, event_id: str) -> CustomResponse[None]:
+        """Delete an event from a group"""
+        self.service.delete_event(group_id, event_id)
+        
+        return CustomResponse(data=None)

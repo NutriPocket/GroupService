@@ -36,6 +36,7 @@ def run_around_tests():
         conn.execute(text("DELETE FROM groups"))
         conn.execute(text("DELETE FROM group_members"))
         conn.execute(text("DELETE FROM group_routines"))
+        conn.execute(text("DELETE FROM group_events"))
 
 
 class TestGroupRoutes:
@@ -52,6 +53,18 @@ class TestGroupRoutes:
     valid_user_id = "1cdba348-0279-4634-9bcd-c8ea1d2856af"
     another_valid_user_id = "2cdba348-0279-4634-9bcd-c8ea1d2856af"
     invalid_user_id = "invalid_user_id"
+    valid_event_id = "4cdba348-0279-4634-9bcd-c8ea1d2856af"
+    not_found_event_id = "5cdba348-0279-4634-9bcd-c8ea1d2856af"
+    invalid_event_id = "invalid_event_id"
+
+    valid_event = {
+        "name": "Team Meeting",
+        "description": "Weekly team status meeting",
+        "date": "2025-07-15T00:00:00",
+        "start_hour": 10,
+        "end_hour": 12,
+        "creator_id": "1cdba348-0279-4634-9bcd-c8ea1d2856af"
+    }
 
     """
         POST /groups
@@ -581,3 +594,402 @@ class TestGroupRoutes:
         assert response.status_code == status.HTTP_404_NOT_FOUND
         assert response.json()[
             "detail"] == f"Group with id {self.not_found_group_id} not found"
+
+    """
+        POST /groups/{group_id}/events
+    """
+
+    def test_create_event_success(self):
+        # Create a group first
+        response = client.post("/groups", json=self.valid_group)
+        group_id = response.json()["data"]["id"]
+
+        # Create an event for the group
+        response = client.post(
+            f"/groups/{group_id}/events", json=self.valid_event)
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert "data" in response.json()
+        assert response.json()["data"]["name"] == self.valid_event["name"]
+        assert response.json()[
+            "data"]["description"] == self.valid_event["description"]
+        assert response.json()["data"]["group_id"] == group_id
+        assert response.json()[
+            "data"]["creator_id"] == self.valid_event["creator_id"]
+        assert response.json()["data"]["id"] is not None
+        assert response.json()["data"]["created_at"] is not None
+        assert response.json()["data"]["updated_at"] is not None
+
+    def test_create_event_with_date_in_past(self):
+        # Create a group first
+        response = client.post("/groups", json=self.valid_group)
+        group_id = response.json()["data"]["id"]
+
+        # Create an event with a date in the past
+        event = self.valid_event.copy()
+        event["date"] = "2020-01-01T00:00:00"
+        response = client.post(f"/groups/{group_id}/events", json=event)
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json()[
+            "detail"] == "Event date cannot be in the past"
+
+    def test_create_event_with_invalid_group_id(self):
+        response = client.post(
+            f"/groups/{self.invalid_group_id}/events", json=self.valid_event)
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert response.json()[
+            "detail"] == f"group_id: String should have at least 36 characters, got '{self.invalid_group_id}'"
+
+    def test_create_event_group_not_found(self):
+        response = client.post(
+            f"/groups/{self.not_found_group_id}/events", json=self.valid_event)
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.json()[
+            "detail"] == f"Group with id {self.not_found_group_id} not found"
+
+    def test_create_event_user_not_member(self):
+        # Create a group first
+        response = client.post("/groups", json=self.valid_group)
+        group_id = response.json()["data"]["id"]
+
+        # Try to create an event with a user who isn't a member
+        event = self.valid_event.copy()
+        event["creator_id"] = self.another_valid_user_id
+
+        response = client.post(f"/groups/{group_id}/events", json=event)
+
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+        assert response.json()[
+            "detail"] == f"User with id {self.another_valid_user_id} is not a member of group {group_id}"
+
+    def test_create_event_with_collision(self, monkeypatch):
+        # Mock the repository to simulate a collision
+        def mock_find_colliding_events(self, group_id, date, start_hour, end_hour):
+            return [{"id": "test-id", "name": "Existing Event"}]
+
+        monkeypatch.setattr(
+            GroupRepository, "find_group_colliding_events", mock_find_colliding_events)
+
+        # Create a group first
+        response = client.post("/groups", json=self.valid_group)
+        group_id = response.json()["data"]["id"]
+
+        # Try to create an event that collides
+        response = client.post(
+            f"/groups/{group_id}/events", json=self.valid_event)
+
+        assert response.status_code == status.HTTP_409_CONFLICT
+        assert "Conflict in event schedules" == response.json()["title"]
+        assert "Event collides with existing events:" in response.json()[
+            "detail"]
+
+    """
+        GET /groups/{group_id}/events
+    """
+
+    def test_get_group_events_empty(self):
+        # Create a group first
+        response = client.post("/groups", json=self.valid_group)
+        group_id = response.json()["data"]["id"]
+
+        # Get events (should be empty)
+        response = client.get(f"/groups/{group_id}/events")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert "data" in response.json()
+        assert isinstance(response.json()["data"], list)
+        assert len(response.json()["data"]) == 0
+
+    def test_get_group_events_success(self):
+        # Create a group first
+        response = client.post("/groups", json=self.valid_group)
+        group_id = response.json()["data"]["id"]
+
+        # Create an event for the group
+        client.post(f"/groups/{group_id}/events", json=self.valid_event)
+
+        # Get all events
+        response = client.get(f"/groups/{group_id}/events")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert "data" in response.json()
+        assert isinstance(response.json()["data"], list)
+        assert len(response.json()["data"]) == 1
+        assert response.json()["data"][0]["name"] == self.valid_event["name"]
+        assert response.json()[
+            "data"][0]["description"] == self.valid_event["description"]
+
+    def test_get_group_events_with_invalid_group_id(self):
+        response = client.get(f"/groups/{self.invalid_group_id}/events")
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert response.json()[
+            "detail"] == f"group_id: String should have at least 36 characters, got '{self.invalid_group_id}'"
+
+    def test_get_group_events_group_not_found(self):
+        response = client.get(f"/groups/{self.not_found_group_id}/events")
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.json()[
+            "detail"] == f"Group with id {self.not_found_group_id} not found"
+
+    """
+        GET /groups/{group_id}/events/{event_id}
+    """
+
+    def test_get_group_event_success(self):
+        # Create a group first
+        response = client.post("/groups", json=self.valid_group)
+        group_id = response.json()["data"]["id"]
+
+        # Create an event for the group
+        response = client.post(
+            f"/groups/{group_id}/events", json=self.valid_event)
+        event_id = response.json()["data"]["id"]
+
+        # Get the specific event
+        response = client.get(f"/groups/{group_id}/events/{event_id}")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert "data" in response.json()
+        assert response.json()["data"]["id"] == event_id
+        assert response.json()["data"]["name"] == self.valid_event["name"]
+
+    def test_get_group_event_with_invalid_ids(self):
+        response = client.get(
+            f"/groups/{self.invalid_group_id}/events/{self.valid_event_id}")
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert "group_id: String should have at least 36 characters" in response.json()[
+            "detail"]
+
+        # Create a group first
+        response = client.post("/groups", json=self.valid_group)
+        group_id = response.json()["data"]["id"]
+
+        response = client.get(
+            f"/groups/{group_id}/events/{self.invalid_event_id}")
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+        assert "event_id: String should have at least 36 characters" in response.json()[
+            "detail"]
+
+    def test_get_group_event_not_found(self):
+        # Create a group first
+        response = client.post("/groups", json=self.valid_group)
+        group_id = response.json()["data"]["id"]
+
+        response = client.get(
+            f"/groups/{group_id}/events/{self.not_found_event_id}")
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert f"Event with id {self.not_found_event_id} not found in group {group_id}" in response.json()[
+            "detail"]
+
+    """
+        PATCH /groups/{group_id}/events/{event_id}
+    """
+
+    def test_update_event_success(self):
+        # Create a group first
+        response = client.post("/groups", json=self.valid_group)
+        group_id = response.json()["data"]["id"]
+
+        # Create an event for the group
+        response = client.post(
+            f"/groups/{group_id}/events", json=self.valid_event)
+        event_id = response.json()["data"]["id"]
+
+        # Update the event
+        updated_event = self.valid_event.copy()
+        updated_event["name"] = "Updated Meeting"
+        updated_event["description"] = "Updated description"
+
+        response = client.patch(
+            f"/groups/{group_id}/events/{event_id}", json=updated_event)
+
+        assert response.status_code == status.HTTP_200_OK
+        assert "data" in response.json()
+        assert response.json()["data"]["id"] == event_id
+        assert response.json()["data"]["name"] == "Updated Meeting"
+        assert response.json()["data"]["description"] == "Updated description"
+
+    def test_update_event_with_date_in_past(self):
+        # Create a group first
+        response = client.post("/groups", json=self.valid_group)
+        group_id = response.json()["data"]["id"]
+
+        # Create an event for the group
+        response = client.post(
+            f"/groups/{group_id}/events", json=self.valid_event)
+        event_id = response.json()["data"]["id"]
+
+        # Update the event with a date in the past
+        updated_event = self.valid_event.copy()
+        updated_event["date"] = "2020-01-01T00:00:00"
+
+        response = client.patch(
+            f"/groups/{group_id}/events/{event_id}", json=updated_event)
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.json()[
+            "detail"] == "Event date cannot be in the past"
+
+    def test_update_event_with_invalid_ids(self):
+        response = client.patch(
+            f"/groups/{self.invalid_group_id}/events/{self.valid_event_id}", json=self.valid_event)
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+        # Create a group first
+        response = client.post("/groups", json=self.valid_group)
+        group_id = response.json()["data"]["id"]
+
+        response = client.patch(
+            f"/groups/{group_id}/events/{self.invalid_event_id}", json=self.valid_event)
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    def test_update_event_not_found(self):
+        # Create a group first
+        response = client.post("/groups", json=self.valid_group)
+        group_id = response.json()["data"]["id"]
+
+        response = client.patch(
+            f"/groups/{group_id}/events/{self.not_found_event_id}", json=self.valid_event)
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert f"Event with id {self.not_found_event_id} not found in group {group_id}" in response.json()[
+            "detail"]
+
+    def test_update_event_user_not_member(self):
+        # Create a group first
+        response = client.post("/groups", json=self.valid_group)
+        group_id = response.json()["data"]["id"]
+
+        # Create an event for the group
+        response = client.post(
+            f"/groups/{group_id}/events", json=self.valid_event)
+        event_id = response.json()["data"]["id"]
+
+        # Update with non-member user
+        updated_event = self.valid_event.copy()
+        updated_event["creator_id"] = self.another_valid_user_id
+
+        response = client.patch(
+            f"/groups/{group_id}/events/{event_id}", json=updated_event)
+
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+        assert f"User with id {self.another_valid_user_id} is not a member of group {group_id}" in response.json()[
+            "detail"]
+
+    """
+        DELETE /groups/{group_id}/events/{event_id}
+    """
+
+    def test_delete_event_success(self):
+        # Create a group first
+        response = client.post("/groups", json=self.valid_group)
+        group_id = response.json()["data"]["id"]
+
+        # Create an event for the group
+        response = client.post(
+            f"/groups/{group_id}/events", json=self.valid_event)
+        event_id = response.json()["data"]["id"]
+
+        # Delete the event
+        response = client.delete(f"/groups/{group_id}/events/{event_id}")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["data"] is None
+
+        # Verify event is gone
+        response = client.get(f"/groups/{group_id}/events/{event_id}")
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_delete_event_with_invalid_ids(self):
+        response = client.delete(
+            f"/groups/{self.invalid_group_id}/events/{self.valid_event_id}")
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+        # Create a group first
+        response = client.post("/groups", json=self.valid_group)
+        group_id = response.json()["data"]["id"]
+
+        response = client.delete(
+            f"/groups/{group_id}/events/{self.invalid_event_id}")
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    def test_delete_event_not_found(self):
+        # Create a group first
+        response = client.post("/groups", json=self.valid_group)
+        group_id = response.json()["data"]["id"]
+
+        response = client.delete(
+            f"/groups/{group_id}/events/{self.not_found_event_id}")
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert f"Event with id {self.not_found_event_id} not found in group {group_id}" in response.json()[
+            "detail"]
+
+    def test_delete_event_group_not_found(self):
+        response = client.delete(
+            f"/groups/{self.not_found_group_id}/events/{self.valid_event_id}")
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert f"Group with id {self.not_found_group_id} not found" in response.json()[
+            "detail"]
+
+    """
+        Error cases and edge cases
+    """
+
+    def test_create_event_server_error(self, monkeypatch):
+        # Monkeypatch to simulate 500 from controller
+        def mock_post_event_error(self, group_id, event):
+            raise Exception("Database connection error")
+
+        monkeypatch.setattr(
+            GroupController, "post_group_event", mock_post_event_error)
+
+        # Create a group first
+        response = client.post("/groups", json=self.valid_group)
+        group_id = response.json()["data"]["id"]
+
+        with pytest.raises(Exception):
+            client.post(f"/groups/{group_id}/events", json=self.valid_event)
+
+    def test_create_event_with_invalid_data(self):
+        # Create a group first
+        response = client.post("/groups", json=self.valid_group)
+        group_id = response.json()["data"]["id"]
+
+        # Invalid date format
+        invalid_event = self.valid_event.copy()
+        invalid_event["date"] = "not-a-date"
+        response = client.post(
+            f"/groups/{group_id}/events", json=invalid_event)
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+        # Invalid hours
+        invalid_event = self.valid_event.copy()
+        invalid_event["start_hour"] = 25  # Out of range
+        response = client.post(
+            f"/groups/{group_id}/events", json=invalid_event)
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+        invalid_event = self.valid_event.copy()
+        invalid_event["end_hour"] = -1  # Out of range
+        response = client.post(
+            f"/groups/{group_id}/events", json=invalid_event)
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+        # Missing required fields
+        invalid_event = {
+            "name": "Test Event"
+            # Missing required fields
+        }
+        response = client.post(
+            f"/groups/{group_id}/events", json=invalid_event)
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
