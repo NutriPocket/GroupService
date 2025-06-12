@@ -14,6 +14,7 @@ from models.routine import PostRoutineParams, RoutineDTO, RoutineReturn, Schedul
 from repository.group_repository import GroupRepository, IGroupRepository
 import requests
 
+
 class IGroupService(metaclass=ABCMeta):
     @abstractmethod
     def save_group(self, group: GroupDTO) -> GroupReturn:
@@ -370,6 +371,13 @@ class GroupService(IGroupService):
         poll = self.repository.get_poll(vote.poll_id)
         if not poll:
             raise NotFoundError(f"Poll with id {vote.poll_id} not found")
+
+        options = self.repository.get_poll_options(vote.poll_id)
+        option_ids = [option.id for option in options]
+        if vote.option_id not in option_ids:
+            raise NotFoundError(
+                detail=f"Option with id {vote.option_id} does not exist in poll {vote.poll_id}"
+            )
 
         self.repository.delete_poll_vote(vote.poll_id, vote.user_id)
         self.repository.save_poll_vote(vote)

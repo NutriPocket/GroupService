@@ -87,6 +87,11 @@ class IGroupRepository(metaclass=ABCMeta):
         pass
 
     @abstractmethod
+    def get_poll_options(self, poll_id: str) -> list[Option]:
+        """Get all options for a poll"""
+        pass
+
+    @abstractmethod
     def get_poll_votes(self, poll_id: str) -> dict[int, int]:
         """Get vote counts for each option in a poll"""
         pass
@@ -441,20 +446,46 @@ class GroupRepository(IGroupRepository):
             """
         )
 
+        try:
+            with self.engine.begin() as connection:
+                connection.execute(query, params)
+
+                # Insert options
+                for option in poll.options:
+                    option_params: dict[str, Any] = {
+                        "id": option.id,
+                        "poll_id": poll_id,
+                        "option_text": option.text
+                    }
+
+                    connection.execute(option_query, option_params)
+
+            return poll_id
+
+        except IntegrityError as e:
+            raise EntityAlreadyExistsError(
+                title="Option already exists",
+                detail=f"Duplicate option in poll data"
+            ) from e
+
+    def get_poll_options(self, poll_id: str) -> list[Option]:
+        """Get all options for a poll"""
+        query = text(
+            """
+            SELECT id, option_text, created_at
+            FROM poll_options
+            WHERE poll_id = :poll_id
+            """
+        )
+
+        params: dict[str, Any] = {
+            "poll_id": poll_id
+        }
+
         with self.engine.begin() as connection:
-            connection.execute(query, params)
+            result = connection.execute(query, params).fetchall()
 
-            # Insert options
-            for option in poll.options:
-                option_params: dict[str, Any] = {
-                    "id": option.id,
-                    "poll_id": poll_id,
-                    "option_text": option.text
-                }
-
-                connection.execute(option_query, option_params)
-
-        return poll_id
+        return [Option(id=row.id, text=row.option_text, created_at=row.created_at) for row in result]
 
     def save_poll_vote(self, vote: VoteDTO) -> None:
         """Save a user's vote for a poll option"""

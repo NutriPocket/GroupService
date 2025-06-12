@@ -383,6 +383,10 @@ def get_group_routines(
             "model": ErrorDTO,
             "description": "Group with id {group_id} not found"
         },
+        status.HTTP_409_CONFLICT: {
+            "model": ErrorDTO,
+            "description": "Repeated poll options ids"
+        },
         status.HTTP_422_UNPROCESSABLE_ENTITY: {
             "model": ErrorDTO,
             "description": "Unprocessable entity, body must match the schema"
