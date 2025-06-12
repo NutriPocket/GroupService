@@ -5,11 +5,12 @@ from uuid import uuid4
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import IntegrityError
 from database.database import engine
-from models.errors.errors import EntityAlreadyExistsError
+from models.errors.errors import EntityAlreadyExistsError, NotFoundError
 from models.event import EventDTO, EventReturn
 from models.group import GroupDTO, GroupReturn
 from models.member import Member
 from models.routine import RoutineDTO, RoutineReturn, Schedule
+from models.poll import Option, PollDTO, PollReturn, VoteDTO
 from datetime import datetime
 
 
@@ -68,6 +69,41 @@ class IGroupRepository(metaclass=ABCMeta):
 
     @abstractmethod
     def find_group_colliding_events(self, group_id: str, date: datetime, start_hour: int, end_hour: int) -> list[EventReturn]:
+        pass
+
+    @abstractmethod
+    def save_poll(self, group_id: str, creator_id: str, event_id: str, poll: PollDTO) -> str:
+        """Create a new poll for a group and return the poll ID"""
+        pass
+
+    @abstractmethod
+    def save_poll_vote(self, vote: VoteDTO) -> None:
+        """Save a user's vote for a poll option"""
+        pass
+
+    @abstractmethod
+    def delete_poll_vote(self, poll_id: str, user_id: str) -> None:
+        """Delete a user's vote for a poll option"""
+        pass
+
+    @abstractmethod
+    def get_poll_options(self, poll_id: str) -> list[Option]:
+        """Get all options for a poll"""
+        pass
+
+    @abstractmethod
+    def get_poll_votes(self, poll_id: str) -> dict[int, int]:
+        """Get vote counts for each option in a poll"""
+        pass
+
+    @abstractmethod
+    def get_poll(self, poll_id: str) -> Optional[PollReturn]:
+        """Get a poll with its options and votes"""
+        pass
+
+    @abstractmethod
+    def get_poll_by_event_id(self, event_id: str) -> Optional[PollReturn]:
+        """Get a poll associated with a specific event"""
         pass
 
 
@@ -382,3 +418,210 @@ class GroupRepository(IGroupRepository):
             result = connection.execute(query, params).fetchall()
 
         return [EventReturn(**row._mapping) for row in result] if result else []
+
+    def save_poll(self, group_id: str, creator_id: str, event_id: str, poll: PollDTO) -> str:
+        """Create a new poll for a group and return the poll ID"""
+        # Insert the poll
+        query = text(
+            """
+            INSERT INTO poll (id, group_id, creator_id, event_id, question)
+            VALUES (:id, :group_id, :creator_id, :event_id, :question)
+            RETURNING id
+            """
+        )
+
+        poll_id = str(uuid4())
+        params: dict[str, Any] = {
+            "id": poll_id,
+            "group_id": group_id,
+            "creator_id": creator_id,
+            "question": poll.question,
+            "event_id": event_id
+        }
+
+        option_query = text(
+            """
+            INSERT INTO poll_options (id, poll_id, option_text)
+            VALUES (:id, :poll_id, :option_text)
+            """
+        )
+
+        try:
+            with self.engine.begin() as connection:
+                connection.execute(query, params)
+
+                # Insert options
+                for option in poll.options:
+                    option_params: dict[str, Any] = {
+                        "id": option.id,
+                        "poll_id": poll_id,
+                        "option_text": option.text
+                    }
+
+                    connection.execute(option_query, option_params)
+
+            return poll_id
+
+        except IntegrityError as e:
+            raise EntityAlreadyExistsError(
+                title="Option already exists",
+                detail=f"Duplicate option in poll data"
+            ) from e
+
+    def get_poll_options(self, poll_id: str) -> list[Option]:
+        """Get all options for a poll"""
+        query = text(
+            """
+            SELECT id, option_text, created_at
+            FROM poll_options
+            WHERE poll_id = :poll_id
+            """
+        )
+
+        params: dict[str, Any] = {
+            "poll_id": poll_id
+        }
+
+        with self.engine.begin() as connection:
+            result = connection.execute(query, params).fetchall()
+
+        return [Option(id=row.id, text=row.option_text, created_at=row.created_at) for row in result]
+
+    def save_poll_vote(self, vote: VoteDTO) -> None:
+        """Save a user's vote for a poll option"""
+        query = text(
+            """
+            INSERT INTO poll_votes (poll_id, user_id, option_id)
+            VALUES (:poll_id, :user_id, :option_id)
+            ON CONFLICT (poll_id, user_id, option_id) 
+            DO UPDATE SET created_at = CURRENT_TIMESTAMP
+            """
+        )
+
+        params: dict[str, Any] = {
+            "poll_id": vote.poll_id,
+            "user_id": vote.user_id,
+            "option_id": vote.option_id
+        }
+
+        with self.engine.begin() as connection:
+            connection.execute(query, params)
+
+    def delete_poll_vote(self, poll_id: str, user_id: str) -> None:
+        """Delete a user's vote for a poll option"""
+        query = text(
+            """
+            DELETE FROM poll_votes
+            WHERE poll_id = :poll_id AND user_id = :user_id
+            """
+        )
+
+        params: dict[str, Any] = {
+            "poll_id": poll_id,
+            "user_id": user_id
+        }
+
+        with self.engine.begin() as connection:
+            connection.execute(query, params)
+
+    def get_poll_votes(self, poll_id: str) -> dict[int, int]:
+        """Get vote counts for each option in a poll"""
+        query = text(
+            """
+            SELECT option_id, COUNT(*) as vote_count
+            FROM poll_votes
+            WHERE poll_id = :poll_id
+            GROUP BY option_id
+            """
+        )
+
+        params: dict[str, Any] = {
+            "poll_id": poll_id
+        }
+
+        with self.engine.begin() as connection:
+            result = connection.execute(query, params).fetchall()
+
+        # Convert to dictionary of option_id -> count
+        return {int(row.option_id): row.vote_count for row in result}
+
+    def get_poll(self, poll_id: str) -> Optional[PollReturn]:
+        """Get a poll with its options and votes"""
+        query = text(
+            """
+            SELECT id, group_id, creator_id, question, created_at
+            FROM poll
+            WHERE id = :poll_id
+            """
+        )
+
+        params: dict[str, Any] = {
+            "poll_id": poll_id
+        }
+
+        options_query = text(
+            """
+                SELECT id, option_text, created_at
+                FROM poll_options
+                WHERE poll_id = :poll_id
+                """
+        )
+
+        with self.engine.begin() as connection:
+            poll_result = connection.execute(query, params).fetchone()
+
+            if not poll_result:
+                return None
+
+            # Get options
+
+            options_result = connection.execute(
+                options_query, {"poll_id": poll_id}).fetchall()
+
+            options = [
+                Option(
+                    id=row.id,
+                    text=row.option_text,
+                    created_at=row.created_at
+                ) for row in options_result
+            ]
+
+            # Get vote counts
+            votes = self.get_poll_votes(poll_id)
+
+            # Construct the PollReturn object
+            return PollReturn(
+                id=poll_result.id,
+                question=poll_result.question,
+                options=options,
+                votes=votes,
+                created_at=poll_result.created_at
+            )
+
+    def get_poll_by_event_id(self, event_id: str) -> Optional[PollReturn]:
+        """Get a poll associated with a specific event"""
+        # First, find the poll_id for this event
+        poll_id_query = text(
+            """
+            SELECT id
+            FROM poll
+            WHERE event_id = :event_id
+            """
+        )
+
+        params: dict[str, Any] = {
+            "event_id": event_id
+        }
+
+        poll_id: str = ""
+        with self.engine.begin() as connection:
+            poll_id_result = connection.execute(
+                poll_id_query, params).fetchone()
+
+            if not poll_id_result:
+                return None
+
+            poll_id = poll_id_result.id
+
+        # Now get the poll details using the existing get_poll method
+        return self.get_poll(poll_id)

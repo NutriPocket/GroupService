@@ -39,3 +39,32 @@ CREATE TABLE IF NOT EXISTS group_events (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS poll (
+    id VARCHAR(36) PRIMARY KEY,
+    event_id VARCHAR(36) NOT NULL,
+    group_id VARCHAR(36) NOT NULL,
+    creator_id VARCHAR(36) NOT NULL,
+    question VARCHAR(256) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE,
+    FOREIGN KEY (event_id) REFERENCES group_events(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS poll_options (
+    id SMALLINT NOT NULL,
+    poll_id VARCHAR(36) NOT NULL,
+    option_text VARCHAR(256) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (poll_id) REFERENCES poll(id) ON DELETE CASCADE,
+    PRIMARY KEY (id, poll_id)
+);
+
+CREATE TABLE IF NOT EXISTS poll_votes (
+    poll_id VARCHAR(36) NOT NULL,
+    user_id VARCHAR(36) NOT NULL,
+    option_id VARCHAR(36) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (poll_id) REFERENCES poll(id) ON DELETE CASCADE,
+    PRIMARY KEY (poll_id, user_id, option_id)
+);
