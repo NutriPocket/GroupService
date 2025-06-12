@@ -1,5 +1,8 @@
 from datetime import datetime
+from typing import Optional
 from pydantic import BaseModel, Field
+
+from models.poll import Option, PollDTO, PollReturn
 
 
 class EventDTO(BaseModel):
@@ -43,6 +46,23 @@ class EventDTO(BaseModel):
         title="UUID",
         min_length=36, max_length=36,
         pattern="^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    )
+    poll: Optional[PollDTO | PollReturn] = Field(
+        None,
+        description="Optional poll associated with the event",
+        examples=[
+            PollDTO(
+                question="What time should we start?",
+                options=[
+                    Option(
+                        id=1, text="9 AM", created_at=datetime.now()
+                    ),
+                    Option(
+                        id=2, text="10 AM", created_at=datetime.now()
+                    )
+                ]
+            )
+        ]
     )
 
 

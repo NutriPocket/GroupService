@@ -9,10 +9,10 @@ from models.errors.errors import AuthenticationError, BadGatewayError, ConflictE
 from models.event import EventDTO, EventReturn
 from models.group import GroupDTO, GroupReturn
 from models.member import Member
+from models.poll import PollReturn, VoteDTO
 from models.routine import PostRoutineParams, RoutineDTO, RoutineReturn, Schedule
 from repository.group_repository import GroupRepository, IGroupRepository
 import requests
-
 
 class IGroupService(metaclass=ABCMeta):
     @abstractmethod
@@ -61,6 +61,10 @@ class IGroupService(metaclass=ABCMeta):
 
     @abstractmethod
     def delete_event(self, group_id: str, event_id: str) -> None:
+        pass
+
+    @abstractmethod
+    def put_vote(self, vote: VoteDTO) -> PollReturn:
         pass
 
 
@@ -239,6 +243,16 @@ class GroupService(IGroupService):
         if not ret:
             raise Exception("Failed to group event")
 
+        if not event.poll:
+            return ret
+
+        poll_id: str = self.repository.save_poll(
+            group_id, event.creator_id, ret.id, event.poll)
+
+        ret.poll = self.repository.get_poll(poll_id)
+        if not ret.poll:
+            raise Exception("Failed to save event poll")
+
         return ret
 
     def update_event(self, group_id: str, event_id: str, event: EventDTO) -> EventReturn:
@@ -325,6 +339,8 @@ class GroupService(IGroupService):
             raise NotFoundError(
                 f"Event with id {event_id} not found in group {group_id}")
 
+        event.poll = self.repository.get_poll_by_event_id(event_id)
+
         return event
 
     def delete_event(self, group_id: str, event_id: str) -> None:
@@ -346,3 +362,18 @@ class GroupService(IGroupService):
 
         # Delete event
         self.repository.delete_event(group_id, event_id)
+
+    def put_vote(self, vote: VoteDTO) -> PollReturn:
+        """
+        Save a vote for a poll option
+        """
+        poll = self.repository.get_poll(vote.poll_id)
+        if not poll:
+            raise NotFoundError(f"Poll with id {vote.poll_id} not found")
+
+        self.repository.delete_poll_vote(vote.poll_id, vote.user_id)
+        self.repository.save_poll_vote(vote)
+
+        poll.votes = self.repository.get_poll_votes(vote.poll_id)
+
+        return poll

@@ -6,6 +6,7 @@ from controller.group_controller import GroupController
 from models.event import EventDTO, EventReturn
 from models.group import GroupDTO, GroupReturn
 from models.member import Member
+from models.poll import PollReturn, VoteDTO
 from models.response import CustomResponse, ErrorDTO
 from models.routine import PostRoutineParams, RoutineDTO, RoutineReturn
 from tests.test_jwt import auth_header
@@ -621,3 +622,52 @@ def delete_group_event(
     )
 ) -> CustomResponse[None]:
     return GroupController().delete_group_event(group_id, event_id)
+
+
+@router.put(
+    "/polls/{poll_id}",
+    summary="Vote on poll: {poll_id}",
+    status_code=status.HTTP_200_OK,
+    responses={
+        status.HTTP_200_OK: {
+            "model": CustomResponse[EventReturn],
+            "description": "Event voted successfully"
+        },
+        status.HTTP_400_BAD_REQUEST: {
+            "model": ErrorDTO,
+            "description": "Bad request"
+        },
+        status.HTTP_401_UNAUTHORIZED: {
+            "model": ErrorDTO,
+            "description": "User unauthorized"
+        },
+        status.HTTP_403_FORBIDDEN: {
+            "model": ErrorDTO,
+            "description": "No authorization provided"
+        },
+        status.HTTP_404_NOT_FOUND: {
+            "model": ErrorDTO,
+            "description": "Event or group not found"
+        },
+        status.HTTP_422_UNPROCESSABLE_ENTITY: {
+            "model": ErrorDTO,
+            "description": "Unprocessable entity, body must match the schema"
+        },
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {
+            "model": ErrorDTO,
+            "description": "Internal server error"
+        },
+    }
+)
+def put_vote(
+    vote: VoteDTO,
+    poll_id: str = Path(
+        ...,
+        description="ID of the poll",
+        examples=["123e4567-e89b-12d3-a456-426614174001"],
+        title="UUID",
+        min_length=36, max_length=36,
+        pattern="^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    ),
+) -> CustomResponse[PollReturn]:
+    return GroupController().put_vote(vote, poll_id)
