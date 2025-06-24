@@ -15,3 +15,4 @@ $do$;
 \c database
 
 \i src/sql/tables.sql;
+\i src/sql/default.sql;
